@@ -1,0 +1,16 @@
+[Unit]
+Description=Capture Raspberry Pi system state immediately before shutdown
+Documentation=https://github.com/marktheknife/docker-homebridge
+# Run as late as possible during shutdown, before the filesystem goes read-only.
+DefaultDependencies=no
+Before=shutdown.target reboot.target halt.target
+Requires=local-fs.target
+After=local-fs.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStop=/usr/local/bin/rpi-shutdown-capture.sh
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,17 @@
+[Unit]
+Description=Raspberry Pi system health monitor
+Documentation=https://github.com/marktheknife/docker-homebridge
+After=multi-user.target
+Wants=multi-user.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/rpi-monitor.sh 30
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=rpi-monitor
+
+[Install]
+WantedBy=multi-user.target
