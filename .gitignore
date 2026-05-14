@@ -1,4 +1,5 @@
 test-volume
+scripts/.rpi-mac
 .DS_Store
 /volumes
 node_modules

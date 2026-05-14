@@ -1,17 +1,21 @@
 #!/usr/bin/env bash
 # Installs the rpi-monitor and rpi-shutdown-capture services on a Raspberry Pi.
+# Optionally configures Wake-on-LAN so the Pi can be woken remotely after a
+# clean OS shutdown (use --wol to enable).
 #
-# Usage:  ./rpi-monitor-install.sh <pi-host> [ssh-user]
+# Usage:  ./rpi-monitor-install.sh <pi-host> [ssh-user] [--wol]
 #         ./rpi-monitor-install.sh raspberrypi.local
-#         ./rpi-monitor-install.sh 192.168.1.42 pi
+#         ./rpi-monitor-install.sh 192.168.1.42 pi --wol
 #
 # Requires: ssh access with sudo on the target host.
 
 set -euo pipefail
 
-PI_HOST="${1:?Usage: $0 <pi-host> [ssh-user]}"
+PI_HOST="${1:?Usage: $0 <pi-host> [ssh-user] [--wol]}"
 SSH_USER="${2:-$(whoami)}"
 SSH="${SSH_USER}@${PI_HOST}"
+SETUP_WOL=false
+for arg in "$@"; do [[ "$arg" == "--wol" ]] && SETUP_WOL=true; done
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
@@ -22,9 +26,12 @@ command -v ssh  >/dev/null || fatal "ssh not found"
 command -v scp  >/dev/null || fatal "scp not found"
 
 info "Copying scripts to ${SSH}:/tmp/ ..."
-scp "${SCRIPT_DIR}/rpi-monitor.sh" \
-    "${SCRIPT_DIR}/rpi-shutdown-capture.sh" \
-    "${SSH}:/tmp/"
+SCRIPTS_TO_COPY=(
+  "${SCRIPT_DIR}/rpi-monitor.sh"
+  "${SCRIPT_DIR}/rpi-shutdown-capture.sh"
+)
+"$SETUP_WOL" && SCRIPTS_TO_COPY+=("${SCRIPT_DIR}/rpi-wol-setup.sh")
+scp "${SCRIPTS_TO_COPY[@]}" "${SSH}:/tmp/"
 
 info "Installing binaries and systemd units ..."
 # shellcheck disable=SC2087
@@ -81,6 +88,18 @@ sudo systemctl enable rpi-shutdown-capture.service
 echo "Status of rpi-monitor:"
 sudo systemctl status rpi-monitor.service --no-pager || true
 REMOTE
+
+if "$SETUP_WOL"; then
+  info "Configuring Wake-on-LAN..."
+  MAC=$(ssh "$SSH" "sudo bash /tmp/rpi-wol-setup.sh" \
+    | tee /dev/stderr \
+    | grep "MAC address:" | awk '{print $NF}')
+  if [[ -n "$MAC" ]]; then
+    echo "$MAC" > "${SCRIPT_DIR}/.rpi-mac"
+    info "MAC address saved to scripts/.rpi-mac"
+    info "To wake the Pi: ./scripts/rpi-wake.sh"
+  fi
+fi
 
 info "Done. Logs will appear in /var/log/rpi-monitor/ on the Pi."
 info "To tail the live log:  ssh ${SSH} 'tail -f /var/log/rpi-monitor/rpi-monitor-\$(date +%Y-%m-%d).log'"
